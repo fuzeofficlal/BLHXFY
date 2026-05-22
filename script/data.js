@@ -242,6 +242,18 @@ const md5File = async () => {
 }
 
 const start = async () => {
+  const hasData = await fse.pathExists('./data/')
+  if (!hasData) {
+    console.warn('\n[Warning] 本地未检测到 ./data/ 汉化数据源目录，将跳过 CSV 汉化数据整合。')
+    console.warn('如果您只需要进行 Userscript 前端代码的功能重构和调试，这是正常的。\n')
+    await fse.ensureDir('./dist/blhxfy/')
+    // 如果 src 下的 lacia.html 存在，还是拷贝一下
+    if (await fse.pathExists('./src/lacia.html')) {
+      await fse.copy('./src/lacia.html', './dist/blhxfy/lacia.html')
+    }
+    return
+  }
+
   await fse.emptyDir('./dist/blhxfy/data/')
   const hash = version
   console.log(hash)

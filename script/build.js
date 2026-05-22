@@ -52,7 +52,9 @@ const build = async function (type = '') {
       'api.anthropic.com',
       'api.deepseek.com',
       'generativelanguage.googleapis.com',
-      'openrouter.ai'
+      'openrouter.ai',
+      'us.novaiapi.com',
+      '*.workers.dev'
     ],
     updateURL: `https://blhx.danmu9.com/blhxfy/extension${type ? '.' + type : ''}.user.js`,
     supportURL: 'https://github.com/biuuu/BLHXFY/issues'

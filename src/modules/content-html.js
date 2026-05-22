@@ -65,9 +65,8 @@ const getHtml = async (encodedHtml, pathname) => {
   } catch (err) {
     console.error(err)
   }
-  if (!settingHtml && pathname.includes('/setting/content/index/index')) {
+  if (pathname.includes('/setting/content/index/index')) {
     html = insertSettingHtml(html)
-    settingHtml = true
   }
   return encodeURIComponent(html)
 }

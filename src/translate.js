@@ -1,5 +1,6 @@
 import URI from 'urijs'
 import CONFIG from './config'
+import { renderStoryScript } from './story/translationUI'
 import isString from 'lodash/isString'
 import isRegExp from 'lodash/isRegExp'
 import loginBonus from './modules/login-bonus'
@@ -123,4 +124,24 @@ export default async function translate(state) {
   }
 
   state.result = isJSON ? JSON.stringify(data) : data
+
+  // 安全模式下，分发到 UI 面板展示剧本流
+  if (state.isSafeMode && isJSON) {
+    if (pathname.includes('scenario') || pathname.includes('npc') || pathname.includes('npc_detail')) {
+      let list = []
+      if (Array.isArray(data)) {
+        list = data
+      } else if (data && data.scene_list) {
+        list = data.scene_list
+      } else if (data && data.scenario && data.scenario.scene_list) {
+        list = data.scenario.scene_list
+      } else if (data && data.scenario) {
+        list = data.scenario
+      }
+      
+      if (Array.isArray(list) && list.length > 0) {
+        renderStoryScript(pathname, list)
+      }
+    }
+  }
 }

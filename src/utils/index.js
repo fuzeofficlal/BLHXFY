@@ -169,6 +169,26 @@ const deepClone = (data) => {
   return JSON.parse(JSON.stringify(data))
 }
 
+const replaceTextInDom = (fromText, toText) => {
+  if (!fromText || !toText || fromText === toText) return
+  try {
+    const walker = document.createTreeWalker(
+      document.body,
+      NodeFilter.SHOW_TEXT,
+      null,
+      false
+    )
+    let node
+    while ((node = walker.nextNode())) {
+      if (node.nodeValue.includes(fromText)) {
+        node.nodeValue = node.nodeValue.split(fromText).join(toText)
+      }
+    }
+  } catch (e) {
+    console.error(e)
+  }
+}
+
 export {
   trim,
   tryDownload,
@@ -183,5 +203,7 @@ export {
   race,
   simpleHtml,
   restoreHtml,
-  deepClone
+  deepClone,
+  replaceTextInDom
 }
+

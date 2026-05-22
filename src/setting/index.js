@@ -1,6 +1,7 @@
 import './etc'
 import throttle from 'lodash/throttle'
 import config from '../config'
+import { settingHtml } from './insertHtml'
 
 const saveToLocalstorage = (key, value) => {
   let data
@@ -31,6 +32,11 @@ const keyMap = new Map([
   ['ai-api-key', 'aiApiKey'],
   ['ai-api-endpoint', 'aiApiEndpoint'],
   ['ai-model', 'aiModel'],
+  ['safe-mode', 'safeMode'],
+  ['ui-layout', 'uiLayout'],
+  ['ui-font-size', 'uiFontSize'],
+  ['ui-theme', 'uiTheme'],
+  ['llm-provider', 'llmProvider'],
   ['trans-api', 'transApi'],
   ['story-only', 'storyOnly'],
   ['show-translator', 'showTranslator'],
@@ -40,11 +46,19 @@ const keyMap = new Map([
   ['plain-text', 'plainText'],
   ['battle-trans', 'battleTrans'],
   ['origin-text', 'originText'],
-  ['default-font', 'defaultFont']
+  ['default-font', 'defaultFont'],
+  ['dev-token', 'devToken']
 ])
 
 const setting = (type, value) => {
   if (type === 'show') {
+    if (!document.getElementById('blhxfy-setting-modal')) {
+      const div = document.createElement('div')
+      div.innerHTML = settingHtml
+      while (div.firstChild) {
+        document.body.appendChild(div.firstChild)
+      }
+    }
     for (let [id, key] of keyMap) {
       const ipt = jQuery(`#${id}-setting-blhxfy`)
       if (!ipt.length) continue
@@ -60,6 +74,7 @@ const setting = (type, value) => {
     }
     jQuery('#blhxfy-setting-modal').addClass('show')
     jQuery('#ai-settings-group').css('display', config.aiTrans ? 'block' : 'none')
+    jQuery('#safe-mode-settings-group').css('display', config.safeMode ? 'block' : 'none')
   } else if (type === 'hide') {
     jQuery('#blhxfy-setting-modal').removeClass('show')
   } else if (type === 'language' || type === 'fast-mode') {

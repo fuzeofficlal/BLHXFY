@@ -58,7 +58,9 @@ const watchCode = () => {
       'api.anthropic.com',
       'api.deepseek.com',
       'generativelanguage.googleapis.com',
-      'openrouter.ai'
+      'openrouter.ai',
+      'us.novaiapi.com',
+      '*.workers.dev'
     ],
     updateURL: `https://blhx.danmu9.com/blhxfy/extension${type ? '.' + type : ''}.user.js`,
     supportURL: 'https://github.com/biuuu/BLHXFY/issues'
@@ -118,6 +120,10 @@ const debounce = (fn, delay) => {
 }
 
 const watchData = () => {
+  if (!fs.existsSync('./data/')) {
+    console.log('No local data changes to watch (./data/ directory does not exist).')
+    return
+  }
   console.log('Watching data changes...')
   const debouncedStartData = debounce(async (filename) => {
     console.log(`Data file changed: ${filename}, re-processing...`)

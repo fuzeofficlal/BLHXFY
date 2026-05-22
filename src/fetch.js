@@ -16,7 +16,19 @@ let fetchInfo = {
 
 const saveManifest = async () => {
   const t = Math.floor(Date.now() / 1000 / 60 / 60 / 6)
-  const res = await fetch(`${config.origin}/blhxfy/manifest.json?t=${t}`)
+  let res
+  try {
+    res = await fetch(`${config.origin}/blhxfy/manifest.json?t=${t}`)
+    if (!res.ok) throw new Error('manifest.json request failed')
+  } catch (err) {
+    if (config.origin.includes('127.0.0.1') || config.origin.includes('localhost')) {
+      console.warn(`[BLHXFY] 本地开发数据源 manifest.json 获取失败，自动降级至官方线上源：https://blhx.danmu9.com`)
+      config.origin = 'https://blhx.danmu9.com'
+      res = await fetch(`${config.origin}/blhxfy/manifest.json?t=${t}`)
+    } else {
+      throw err
+    }
+  }
   const data = await res.json()
   data.time = Date.now()
   localStorage.setItem('blhxfy:manifest', JSON.stringify(data))
@@ -38,19 +50,46 @@ const getManifest = async () => {
   return data
 }
 
+const checkLocalData = async () => {
+  if (config.origin.includes('127.0.0.1') || config.origin.includes('localhost')) {
+    const localDataStatus = sessionStorage.getItem('blhxfy:local_data_ok')
+    if (localDataStatus === 'false') {
+      config.origin = 'https://blhx.danmu9.com'
+    } else if (localDataStatus !== 'true') {
+      try {
+        const t = Math.floor(Date.now() / 1000 / 60 / 60 / 6)
+        const res = await fetch(`${config.origin}/blhxfy/manifest.json?t=${t}`, { method: 'HEAD' })
+        if (res.ok) {
+          sessionStorage.setItem('blhxfy:local_data_ok', 'true')
+        } else {
+          throw new Error('Local manifest not found')
+        }
+      } catch (e) {
+        console.warn(`[BLHXFY] 本地开发数据不可用，已将 origin 重定向至官方 CDN: https://blhx.danmu9.com`)
+        sessionStorage.setItem('blhxfy:local_data_ok', 'false')
+        config.origin = 'https://blhx.danmu9.com'
+      }
+    }
+  }
+}
+
 const tryFetch = async () => {
   if (window.fetch) {
-    // if (sessionStorage.getItem('blhxfy:cors') === 'disabled') {
-    //   fetchInfo.status = 'finished'
-    //   return
-    // }
     try {
+      await checkLocalData()
       const data = await getManifest()
       fetchInfo.data = data
       fetchInfo.result = true
       sessionStorage.setItem('blhxfy:cors', 'enabled')
     } catch (e) {
       sessionStorage.setItem('blhxfy:cors', 'disabled')
+      console.warn('[BLHXFY] 无法获取 manifest.json，启用本地 Mock 降级并重定向到线上数据源:', e)
+      config.origin = 'https://blhx.danmu9.com'
+      fetchInfo.data = {
+        version: config.version,
+        hashes: {}
+      }
+      fetchInfo.result = true
     }
   }
   fetchInfo.status = 'finished'

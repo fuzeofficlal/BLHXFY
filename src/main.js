@@ -1,17 +1,23 @@
 import injectXHR from './xhr'
 import eventMessage from './utils/eventMessage'
 import CONFIG from './config'
+import { toggleSidebar } from './story/translationUI'
 
 const main = () => {
-  const time = sessionStorage.getItem('blhxfy:startTime') || 0
-  const now = Date.now()
-  if (now - time < 1000) return
-  sessionStorage.setItem('blhxfy:startTime', now)
-  eventMessage()
   injectXHR()
 }
 
 const init = () => {
+  eventMessage()
+
+  const win = window.unsafeWindow || window
+  win.blhxfy || (win.blhxfy = {})
+  win.blhxfy.toggleSidebar = toggleSidebar
+  win.blhxfy.config = CONFIG
+  // 根据记忆状态决定初始是否打开侧边栏
+  const savedOpen = localStorage.getItem('blhxfy:sidebarOpen')
+  toggleSidebar(savedOpen === '1')
+
   if (!CONFIG.storyOnly) {
     main()
   } else {
@@ -42,9 +48,11 @@ const init = () => {
       childList: true
     }
 
-    const targetNode = document.head
+    const targetNode = document.head || document.documentElement
     const observer = new MutationObserver(mutationCallback)
-    observer.observe(targetNode, obConfig)
+    if (targetNode && typeof targetNode.nodeType === 'number') {
+      observer.observe(targetNode, obConfig)
+    }
   }
 }
 

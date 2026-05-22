@@ -11,6 +11,7 @@ import transApi from '../utils/translation'
 import setFont from '../setting/scenarioFont'
 import { dataToCsv, dataToJson } from '../utils/scenarioData'
 import aiTransApi from '../utils/aiTrans'
+import { uploadTranslationCache, fetchTranslationCache } from '../store/cloudCache'
 
 const txtKeys = ['chapter_name', 'synopsis', 'detail', 'sel1_txt', 'sel2_txt', 'sel3_txt', 'sel4_txt', 'sel5_txt', 'sel6_txt']
 
@@ -219,6 +220,159 @@ const getRefinedNameMap = (data, nameMap) => {
   return refinedMap
 }
 
+// 后台更新 DOM 和内存数据的热更新核心逻辑
+const applyAiTranslation = (scenarioName, data, transMap, nameMap, startIndex) => {
+  // 1. 更新内存数据源，为了后续游戏再次取值时拿到的是 AI 译文
+  data.forEach((item, index) => {
+    // 替换角色名
+    replaceChar('charcter1_name', item, nameMap)
+    replaceChar('charcter2_name', item, nameMap)
+    replaceChar('charcter3_name', item, nameMap)
+
+    const obj = transMap.get(item.id)
+    if (!obj) return
+    txtKeys.forEach(key => {
+      if (obj[key]) {
+        let newContent = obj[key]
+        if (key === 'detail' && config.originText) {
+          newContent = `${restoreHtml(obj[key], item[`${key}_origin`] || item[key])}
+          <div class="blhxfy-origin-text" data-text='${removeHtmlTag(item[`${key}_origin`] || item[key], 0, true)}'> </div>`
+        } else {
+          newContent = restoreHtml(obj[key], item[`${key}_origin`] || item[key])
+        }
+
+        if (config.showTranslator && key === 'detail' && index === startIndex) {
+          const modelName = config.aiModel || 'AI'
+          const translatorHint = `本节使用 ${modelName} 机翻`
+          newContent = `<a class="autotrans-hint-blhxfy translator-blhxfy" data-text="${translatorHint}"> </a>${newContent}`
+        }
+
+        item[key] = newContent
+      }
+    })
+  })
+
+  // 2. 更新页面 DOM 中标有 blhxfy-temp-trans 的占位/临时译文标签
+  try {
+    const tempElements = document.querySelectorAll('.blhxfy-temp-trans')
+    tempElements.forEach(el => {
+      const id = el.getAttribute('data-id')
+      const key = el.getAttribute('data-key')
+      
+      const obj = transMap.get(id)
+      if (obj && obj[key]) {
+        // 查找其对应的原始文本
+        const item = data.find(i => i.id === id)
+        const originHtml = item ? (item[`${key}_origin`] || item[key]) : ''
+
+        let finalHtml = obj[key]
+        if (key === 'detail' && config.originText) {
+          finalHtml = `${restoreHtml(obj[key], originHtml)}
+          <div class="blhxfy-origin-text" data-text='${removeHtmlTag(originHtml, 0, true)}'> </div>`
+        } else {
+          finalHtml = restoreHtml(obj[key], originHtml)
+        }
+
+        const isStart = item && (parseInt(item.id) === startIndex || data.indexOf(item) === startIndex)
+        if (config.showTranslator && key === 'detail' && isStart) {
+          const modelName = config.aiModel || 'AI'
+          const translatorHint = `本节使用 ${modelName} 机翻`
+          finalHtml = `<a class="autotrans-hint-blhxfy translator-blhxfy" data-text="${translatorHint}"> </a>${finalHtml}`
+        }
+
+        // 把临时元素直接替换为最终译文 HTML
+        el.innerHTML = finalHtml
+        el.classList.remove('blhxfy-temp-trans')
+      }
+    })
+  } catch (domErr) {
+    console.error('[CloudCache] 异步热更新游戏界面 DOM 失败:', domErr)
+  }
+
+  // 3. 更新侧边栏
+  try {
+    const win = window.unsafeWindow || window
+    if (win.blhxfy && typeof win.blhxfy.updateStoryScriptWithAi === 'function') {
+      win.blhxfy.updateStoryScriptWithAi(transMap)
+    }
+  } catch (sidebarErr) {
+    console.error('[CloudCache] 异步热更新侧边栏失败:', sidebarErr)
+  }
+}
+
+// 异步大模型翻译的后台任务
+const runAiTransAsync = async (scenarioName, data, pathname, nameMap, sourceData, refinedNameMap, startIndex) => {
+  console.info(`[Scenario] 开始异步 AI 翻译后台任务 -> 场景: ${scenarioName}, 文本数据长度: ${sourceData ? JSON.parse(sourceData).length : 0}`)
+  try {
+    const result = await aiTransApi(sourceData, refinedNameMap)
+    if (result) {
+      console.info(`[Scenario] AI 翻译任务成功返回结果, 正在处理数据...`)
+      const aiData = result
+      const transMap = new Map()
+
+      // 1. 处理名字
+      if (aiData.name_map) {
+        for (let [jp, cn] of Object.entries(aiData.name_map)) {
+          const _jp = jp.trim()
+          const _cn = cn.trim()
+          if (_jp && _cn && !nameMap.has(_jp)) {
+            nameMap.set(_jp, _cn)
+          }
+        }
+      }
+
+      // 2. 处理翻译文本
+      if (aiData.trans_map) {
+        for (let [id, text] of Object.entries(aiData.trans_map)) {
+          const idArr = id.split('-')
+          const mainId = idArr[0]
+          const type = idArr[1] || 'detail'
+          const obj = transMap.get(mainId) || {}
+
+          let cleanText = text.replace(/^[^:：\uff1a]+[:：\uff1a]\s*/, '')
+
+          const uname = config.displayName || config.userName
+          const textWithBr = cleanText.replace(/\n/g, '<br>')
+          const textWithUname = textWithBr.replace(/(姬塔|古兰)/g, uname)
+          const str = filter(textWithUname)
+          obj[type] = str.replace(/<span\sclass="nickname"><\/span>/g, `<span class='nickname'></span>`)
+          obj[`${type}-origin`] = cleanText
+          transMap.set(mainId, obj)
+        }
+      }
+
+      // 设置译者模型信息
+      const transObj = transMap.get('translator') || {}
+      transObj.detail = config.aiModel || 'AI'
+      transMap.set('translator', transObj)
+
+      // 如果翻译返回时，玩家还没有切换到其他剧情，则执行热更新
+      if (scenarioCache.name === scenarioName) {
+        console.info(`[Scenario] 玩家仍处于当前场景 ${scenarioName}，执行页面 DOM 热更新...`)
+        scenarioCache.transMap = transMap
+        scenarioCache.nameMap = nameMap
+        scenarioCache.hasAutoTrans = true
+        scenarioCache.hasTrans = true
+
+        applyAiTranslation(scenarioName, data, transMap, nameMap, startIndex)
+        
+        // 触发一次字体设置
+        setFont()
+        console.info(`[Scenario] 页面 DOM 热更新与字体设置应用完毕.`)
+      } else {
+        console.info(`[Scenario] 玩家已切换场景 (当前缓存场景: ${scenarioCache.name}, 翻译返回场景: ${scenarioName}), 仅保存翻译缓存`)
+      }
+
+      // 异步上传至云端共享
+      uploadTranslationCache(scenarioName, transMap)
+    } else {
+      console.warn(`[Scenario] AI 翻译任务未返回翻译结果 (可能是 api 密钥为空或接口调用失败/超时)`)
+    }
+  } catch (err) {
+    console.error('[CloudCache] 后台异步 AI 翻译失败:', err)
+  }
+}
+
 const transStart = async (data, pathname) => {
   const pathRst = pathname.match(/\/[^/]*?scenario.*?\/(scene[^\/]+)\/?/)
   if (!pathRst || !pathRst[1]) return data
@@ -249,69 +403,79 @@ const transStart = async (data, pathname) => {
     scenarioCache.originName = transMap.get('filename').detail
   }
 
-  // AI 翻译逻辑
   if (!transMap && config.aiTrans) {
     try {
-      const sourceData = dataToJson(data)
-      const refinedNameMap = getRefinedNameMap(data, nameMap)
-      const aiPromise = aiTransApi(sourceData, refinedNameMap)
-      const raceTimeout = new Promise(resolve => setTimeout(() => resolve('timeout'), 150000))
-
-      const result = await Promise.race([aiPromise, raceTimeout])
-
-      if (result && result !== 'timeout') {
-        const aiData = result
-        transMap = new Map()
-
-        // 1. 处理名词映射
-        if (aiData.name_map) {
-          for (let [jp, cn] of Object.entries(aiData.name_map)) {
-            const _jp = jp.trim()
-            const _cn = cn.trim()
-            if (_jp && _cn && !nameMap.has(_jp)) {
-              nameMap.set(_jp, _cn)
-            }
-          }
-        }
-
-        // 2. 处理对话翻译
-        if (aiData.trans_map) {
-          for (let [id, text] of Object.entries(aiData.trans_map)) {
-            const idArr = id.split('-')
-            const mainId = idArr[0]
-            const type = idArr[1] || 'detail'
-            const obj = transMap.get(mainId) || {}
-
-            // 兜底：自动剥离 AI 可能误加的角色名前缀，如 "角色名: " 或 "角色名："
-            let cleanText = text.replace(/^[^:：\uff1a]+[:：\uff1a]\s*/, '')
-
-            const uname = config.displayName || config.userName
-            // 转换换行符为 <br>
-            const textWithBr = cleanText.replace(/\n/g, '<br>')
-            // 同时替换 姬塔 和 古兰
-            const textWithUname = textWithBr.replace(/(姬塔|古兰)/g, uname)
-            const str = filter(textWithUname)
-            obj[type] = str.replace(/<span\sclass="nickname"><\/span>/g, `<span class='nickname'></span>`)
-            obj[`${type}-origin`] = cleanText
-            transMap.set(mainId, obj)
-
-          }
-        }
-
+      const cloudTrans = await fetchTranslationCache(scenarioName)
+      if (cloudTrans) {
+        transMap = cloudTrans
         isLLMTrans = true
-        scenarioCache.hasAutoTrans = true
+        scenarioCache.hasTrans = true
         scenarioCache.transMap = transMap
-        scenarioCache.nameMap = nameMap
-        const transObj = transMap.get('translator') || {}
-        transObj.detail = config.aiModel || 'AI'
-        transMap.set('translator', transObj)
-      } else if (result === 'timeout') {
-        console.warn('AI translation taking too long (>150s), skipping...')
       }
-    } catch (aiErr) {
-      console.error('AI Translation Process Error:', aiErr)
+    } catch (err) {
+      console.warn('[CloudCache] 获取共享缓存失败:', err)
     }
   }
+
+  // AI 翻译逻辑 (异步非阻塞)
+  if (!transMap && config.aiTrans) {
+    // 触发后台异步 AI 翻译
+    const sourceData = dataToJson(data)
+    const refinedNameMap = getRefinedNameMap(data, nameMap)
+    runAiTransAsync(scenarioName, data, pathname, nameMap, sourceData, refinedNameMap, startIndex)
+
+    // 生成临时翻译（机翻先行或等待占位符）
+    transMap = new Map()
+    isLLMTrans = false // 此时真正的 AI 还未返回，所以不标记为 LLM 翻译，以避免提前显示译者小图标
+
+    if (config.traditionalTrans) {
+      // 传统机翻先行
+      const { nounMap, nounFixMap, caiyunPrefixMap } = await getNounData()
+      const { txtList, infoList } = collectTxt(data)
+      const transList = await transMulti(txtList, nameMap, nounMap, nounFixMap, caiyunPrefixMap)
+      
+      let transNotice = false
+      const transApiName = {
+        caiyun: ['彩云小译', 'https://fanyi.caiyunapp.com/']
+      }
+      const apiData = transApiName[config.transApi]
+      
+      infoList.forEach((info, index) => {
+        const obj = transMap.get(info.id) || {}
+        let tempText = transList[index] || ''
+        if (tempText) {
+          // 用 span 包裹
+          tempText = `<span class="blhxfy-temp-trans" data-id="${info.id}" data-key="${info.type}">${tempText}</span>`
+        }
+        obj[info.type] = tempText
+
+        if (!transNotice && info.index === startIndex && info.type === 'detail' && transList.length > 0) {
+          if (transList[0] !== 'caiyunoutoflimit') {
+            obj[info.type] = `<a href="${apiData[1]}" target="_blank" class="autotrans-hint-blhxfy ${config.transApi}-blhxfy"> </a>${obj[info.type]}`
+          }
+          transNotice = true
+        }
+        transMap.set(info.id, obj)
+      })
+
+      if (transList.length > 0) {
+        scenarioCache.hasAutoTrans = true
+        scenarioCache.transMap = transMap
+      }
+    } else {
+      // 占位符先行
+      const { infoList } = collectTxt(data)
+      infoList.forEach((info) => {
+        const obj = transMap.get(info.id) || {}
+        const placeholder = '没有匹配的翻译，正在等待LLM响应...'
+        obj[info.type] = `<span class="blhxfy-temp-trans" data-id="${info.id}" data-key="${info.type}">${placeholder}</span>`
+        transMap.set(info.id, obj)
+      })
+      scenarioCache.hasAutoTrans = true
+      scenarioCache.transMap = transMap
+    }
+  }
+
   if (!transMap) {
     isLLMTrans = false // 明确重置，防止误显示 AI 提示
     if (config.traditionalTrans) {
@@ -345,9 +509,12 @@ const transStart = async (data, pathname) => {
       return data
     }
   } else {
-    scenarioCache.hasTrans = true
-    scenarioCache.csv = csv
-    scenarioCache.transMap = transMap
+    // 可能是之前就查到了 transMap (包括本地/云端)
+    if (!scenarioCache.transMap) {
+      scenarioCache.hasTrans = true
+      scenarioCache.csv = csv
+      scenarioCache.transMap = transMap
+    }
   }
 
   if (scenarioCache.hasAutoTrans || scenarioCache.hasTrans) {
@@ -355,6 +522,17 @@ const transStart = async (data, pathname) => {
   }
 
   data.forEach((item, index) => {
+    // 保存原始文本到 _origin 字段，供侧边栏原文对照和同步高亮使用
+    txtKeys.forEach(key => {
+      if (item[key] && !item[`${key}_origin`]) {
+        item[`${key}_origin`] = item[key]
+      }
+    })
+    // 保存原始角色名
+    if (item.charcter1_name && !item.charcter1_name_origin) {
+      item.charcter1_name_origin = item.charcter1_name
+    }
+
     replaceChar('charcter1_name', item, nameMap)
     replaceChar('charcter2_name', item, nameMap)
     replaceChar('charcter3_name', item, nameMap)
@@ -383,6 +561,7 @@ const transStart = async (data, pathname) => {
 
   return data
 }
+
 
 
 // ↓ gemini

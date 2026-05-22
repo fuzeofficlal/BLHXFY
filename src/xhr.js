@@ -1,4 +1,5 @@
 import translate from './translate'
+import CONFIG from './config'
 
 const injectXHR = () => {
   // The following code are inspired by viramate/external.js
@@ -35,22 +36,38 @@ const injectXHR = () => {
   const customOnLoad = async function (evt) {
     const state = getXhrState(this)
     state.onLoadEvent = evt
-    Object.defineProperties(this, {
-      response: {
-        get () {
-          return state.result
+    
+    if (CONFIG.safeMode) {
+      // 安全模式：不修改 XHR 响应数据，规避封号风险
+      try {
+        const stateClone = {
+          ...state,
+          isSafeMode: true
         }
-      },
-      responseText: {
-        get () {
-          return state.result
-        }
+        // 异步进行翻译和侧边栏 UI 渲染，不阻塞原生 onload
+        translate(stateClone)
+      } catch (err) {
+        log(err)
       }
-    })
-    try {
-      await translate(state)
-    } catch (err) {
-      log(err)
+    } else {
+      // 传统模式：劫持 response/responseText
+      Object.defineProperties(this, {
+        response: {
+          get () {
+            return state.result
+          }
+        },
+        responseText: {
+          get () {
+            return state.result
+          }
+        }
+      })
+      try {
+        await translate(state)
+      } catch (err) {
+        log(err)
+      }
     }
     state.onload && state.onload.call(this, state.onLoadEvent)
   }
@@ -94,6 +111,8 @@ const injectXHR = () => {
 
   XHR.prototype.open = function open (method, url, async, user, password) {
     try {
+      window.xhrUrls || (window.xhrUrls = [])
+      window.xhrUrls.push(url)
       const state = getXhrState(this)
       state.method = method
       state.url = url

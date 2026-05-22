@@ -52,6 +52,40 @@ const template = `
 			<label for="story-only-setting-blhxfy" class="btn-usual-setting-new adjust-font-s">只翻译剧情</label>
 		</div>
 
+		<div class="prt-setting-article" style="margin-top: 15px;">
+			<div class="txt-article-title">安全汉化模式</div>
+			<ul class="txt-article-lead">
+				<li>开启后完全不修改游戏内部数据，使用侧边栏剧本流展示翻译，彻底规避检测封号风险。</li>
+			</ul>
+			<div class="prt-button" style="display:flex; flex-wrap:wrap; margin-top:5px;">
+				<div style="width:100%">
+					<input id="safe-mode-setting-blhxfy" onchange="window.blhxfy.sendEvent('setting', 'safe-mode', this.checked); document.getElementById('safe-mode-settings-group').style.display = this.checked ? 'block' : 'none'" type="checkbox" value="">
+					<label for="safe-mode-setting-blhxfy" class="btn-usual-setting-new adjust-font-s">启用安全模式</label>
+				</div>
+				
+				<div id="safe-mode-settings-group" style="margin: 10px 0; padding: 10px; border: 1px solid #78bbd8; border-radius: 4px; display: none; width: calc(100% - 22px);">
+					<div style="margin-bottom:10px; display: flex; align-items: center;">
+						<div class="txt-article-title" style="font-size:10px; flex: 0 0 60px; margin-bottom: 0;">面板布局</div>
+						<select id="ui-layout-setting-blhxfy" onchange="window.blhxfy.sendEvent('setting', 'ui-layout', this.value)" style="flex: 1; border: 1px solid #78bbd8; border-radius:2px; height:24px; font-size:12px; color:#4d6671; outline:none; font-family:sans-serif;">
+							<option value="sidebar">右侧边栏</option>
+							<option value="overlay">悬浮弹窗</option>
+						</select>
+					</div>
+					<div style="margin-bottom:10px; display: flex; align-items: center;">
+						<div class="txt-article-title" style="font-size:10px; flex: 0 0 60px; margin-bottom: 0;">面板主题</div>
+						<select id="ui-theme-setting-blhxfy" onchange="window.blhxfy.sendEvent('setting', 'ui-theme', this.value)" style="flex: 1; border: 1px solid #78bbd8; border-radius:2px; height:24px; font-size:12px; color:#4d6671; outline:none; font-family:sans-serif;">
+							<option value="glass">毛玻璃(推荐)</option>
+							<option value="dark">纯深色</option>
+						</select>
+					</div>
+					<div style="display: flex; align-items: center;">
+						<div class="txt-article-title" style="font-size:10px; flex: 0 0 60px; margin-bottom: 0;">字体大小</div>
+						<input style="flex: 1; box-sizing: border-box;" id="ui-font-size-setting-blhxfy" oninput="window.blhxfy.sendEvent('setting', 'ui-font-size', this.value)" type="text" value="" placeholder="16px">
+					</div>
+				</div>
+			</div>
+		</div>
+
 		<div class="prt-setting-frame">
 			<div class="prt-setting-article">
 				<div class="txt-article-title">翻译数据域名</div>
@@ -66,7 +100,7 @@ const template = `
         ※使用第三方数据源有风险，请选择可以信任的数据源。
       </div>
 
-      <div class="prt-setting-article">
+			<div class="prt-setting-article">
 				<div class="txt-article-title">主角名</div>
 				<ul class="txt-article-lead">
 					<li>剧情里显示的主角名字，留空则使用你自己的昵称</li>
@@ -75,6 +109,7 @@ const template = `
           <input id="username-setting-blhxfy" oninput="window.blhxfy.sendEvent('setting', 'username', this.value)" type="text" value="" placeholder="请输入主角名">
 				</div>
 			</div>
+
 
 			<div class="prt-setting-article">
 				<div class="txt-article-title">机翻设置</div>
@@ -92,6 +127,15 @@ const template = `
 					
 					<div id="ai-settings-group" style="margin: 10px 0; padding: 10px; border: 1px solid #78bbd8; border-radius: 4px; display: none; width: calc(100% - 22px);">
 						<div style="margin-bottom:10px; display: flex; align-items: center;">
+							<div class="txt-article-title" style="font-size:10px; flex: 0 0 60px; margin-bottom: 0;">服务商</div>
+							<select id="llm-provider-setting-blhxfy" onchange="window.blhxfy.sendEvent('setting', 'llm-provider', this.value)" style="flex: 1; border: 1px solid #78bbd8; border-radius:2px; height:24px; font-size:12px; color:#4d6671; outline:none; font-family:sans-serif;">
+								<option value="custom">通用自定义 (OpenAI格式)</option>
+								<option value="openai">OpenAI (官方接口)</option>
+								<option value="anthropic">Anthropic (Claude)</option>
+								<option value="gemini">Google (Gemini)</option>
+							</select>
+						</div>
+						<div style="margin-bottom:10px; display: flex; align-items: center;">
 							<div class="txt-article-title" style="font-size:10px; flex: 0 0 60px; margin-bottom: 0;">API密钥</div>
 							<input style="flex: 1; box-sizing: border-box;" id="ai-api-key-setting-blhxfy" oninput="window.blhxfy.sendEvent('setting', 'ai-api-key', this.value)" type="text" value="" placeholder="sk-...">
 						</div>
@@ -99,9 +143,13 @@ const template = `
 							<div class="txt-article-title" style="font-size:10px; flex: 0 0 60px; margin-bottom: 0;">API地址</div>
 							<input style="flex: 1; box-sizing: border-box;" id="ai-api-endpoint-setting-blhxfy" oninput="window.blhxfy.sendEvent('setting', 'ai-api-endpoint', this.value)" type="text" value="" placeholder="https://api.example.com/v1">
 						</div>
-						<div style="display: flex; align-items: center;">
+						<div style="margin-bottom:10px; display: flex; align-items: center;">
 							<div class="txt-article-title" style="font-size:10px; flex: 0 0 60px; margin-bottom: 0;">模型名称</div>
 							<input style="flex: 1; box-sizing: border-box;" id="ai-model-setting-blhxfy" oninput="window.blhxfy.sendEvent('setting', 'ai-model', this.value)" type="text" value="" placeholder="model-name">
+						</div>
+						<div style="display: flex; align-items: center;">
+							<div class="txt-article-title" style="font-size:10px; flex: 0 0 60px; margin-bottom: 0;">开发密钥</div>
+							<input style="flex: 1; box-sizing: border-box;" id="dev-token-setting-blhxfy" oninput="window.blhxfy.sendEvent('setting', 'dev-token', this.value)" type="text" value="" placeholder="输入特权Token，免除API频限">
 						</div>
 					</div>
 

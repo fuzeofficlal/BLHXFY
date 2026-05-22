@@ -32,9 +32,15 @@ const config = {
   aiApiKey: '',
   aiApiEndpoint: '',
   aiModel: '',
+  safeMode: false,
+  uiLayout: 'sidebar',
+  uiFontSize: '16px',
+  uiTheme: 'glass',
+  llmProvider: 'custom',
   originText: false,
   defaultFont: false,
-  cacheTime: 30,
+  cloudCacheUrl: 'https://wandering-feather-71df.blhxfy-db.workers.dev',
+  devToken: '',
   version: version
 }
 
@@ -57,7 +63,8 @@ const getLocalConfig = () => {
 
   const keys = [
     'autoDownload', 'bottomToolbar', 'displayName', 'removeScroller', 'hideSidebar', 'originText', 'storyOnly', 'showTranslator',
-    'traditionalTrans', 'aiTrans', 'aiApiKey', 'aiApiEndpoint', 'aiModel', 'font', 'fontBold', 'plainText', 'battleTrans', 'log', 'defaultFont'
+    'traditionalTrans', 'aiTrans', 'aiApiKey', 'aiApiEndpoint', 'aiModel', 'safeMode', 'uiLayout', 'uiFontSize', 'uiTheme', 'llmProvider',
+    'font', 'fontBold', 'plainText', 'battleTrans', 'log', 'defaultFont', 'devToken'
   ]
   keys.forEach(key => {
     let value = setting[key]
@@ -66,6 +73,10 @@ const getLocalConfig = () => {
       config[key] = value
     }
   })
+
+  // if (LOCAL_HOST) {
+  //   config.cloudCacheUrl = 'http://127.0.0.1:8787'
+  // }
 }
 
 const getLocalHash = () => {
